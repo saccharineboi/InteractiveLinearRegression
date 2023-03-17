@@ -1,0 +1,70 @@
+/* @author: saccharineboi */
+
+#render-output {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.grabbing {
+    cursor: -webkit-grabbing;
+    cursor: grabbing;
+}
+
+#error-output {
+    color: rgb(0, 0, 0);
+    font-size: 2em;
+    background: rgb(255, 255, 255);
+    display: none;
+    overflow: auto;
+}
+
+.stat-simple {
+    position: relative;
+    display: inline-block;
+    background: black;
+    color: white;
+}
+
+.centered {
+    color: white;
+    position: absolute;
+    margin: auto;
+    width: 800px;
+    height: 300px;
+    padding: 20px 50px;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+}
+
+#loading {
+    text-align: center;
+    line-height: 300px;
+    font-size: 5em;
+}
+
+#help {
+    border: 2px solid white;
+    background: black;
+    color: white;
+    width: 400px;
+    height: 400px;
+    display: none;
+}
+
+.title {
+    text-align: center;
+    display: block;
+    font-size: 2em;
+}
+
+ul {
+    padding: 10px;
+}
+
+li {
+    padding: 10px;
+}

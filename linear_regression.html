@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta name="author" content="saccharineboi">
+    <meta name="description" content="saccharineboi's personal webpage">
+    <title>saccharineboi | linear regression</title>
+    <link rel="stylesheet" href="../css/common.css">
+    <link rel="stylesheet" href="../css/labs.css">
+    <link rel="icon" type="image/x-icon" href="../img/favicon.ico">
+</head>
+<body oncontextmenu="return false;">
+    <canvas id="render-output" tabindex="1"></canvas>
+    <div class="centered" id="help">
+        <span class="title">Help Box</span>
+        <ul>
+            <li>Press H to open or close the Help Box</li>
+            <li>Click left mouse button to place points</li>
+            <li>Hold right mouse button and drag mouse to rotate the view</li>
+            <li>Use scroll wheel to set the distance to the panel</li>
+            <li>Use Ctrl-Z to remove points</li>
+        </ul>
+    </div>
+    <div class="centered" id="loading">LOADING...</div>
+    <div class="centered" id="error-output"></div>
+    <div class="stat-simple" id="MS">MS: </div><br>
+    <div class="stat-simple" id="FPS">FPS: </div><br>
+    <div class="stat-simple" id="CAMERA_POS">POS: </div><br>
+    <div class="stat-simple" id="CAMERA_DIR">DIR: </div><br>
+    <div class="stat-simple" id="NUM_POINTS">NUM POINTS: </div><br>
+    <div class="stat-simple" id="SLOPE">SLOPE: </div><br>
+    <div class="stat-simple" id="Y-INTERCEPT">Y-INTERCEPT: </div><br>
+    <script type="module">
+
+        // Copyright (C) 2023 saccharineboi
+        // 
+        // This program is free software: you can redistribute it and/or modify
+        // it under the terms of the GNU General Public License as published by
+        // the Free Software Foundation, either version 3 of the License, or
+        // (at your option) any later version.
+        // 
+        // This program is distributed in the hope that it will be useful,
+        // but WITHOUT ANY WARRANTY; without even the implied warranty of
+        // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+        // GNU General Public License for more details.
+        // 
+        // You should have received a copy of the GNU General Public License
+        // along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+        import { Util,
+                 Vec3,
+                 Vec4,
+                 Mat4,
+                 Quat,
+                 Transform,
+                 SimpleOrbitCamera,
+                 Renderer } from "../js/renderer.js";
+
+        try {
+            const renderer = Renderer("render-output", { antialias: false });
+
+            const camera = SimpleOrbitCamera({
+                position: Vec3(0, 0, 10),
+                target: Vec3(0, 0, 0),
+                renderer: renderer,
+                fovy: Util.ToRadians(90.0),
+                near: 0.1,
+                far: 50.0,
+                smoothing: 0.01,
+                sensitivity: 0.001
+            });
+
+            const panelScale = 50;
+
+            const pointController = renderer.createPointController({
+                renderer: renderer,
+                camera: camera,
+                maxNumPoints: 1000,
+                panelScale: panelScale
+            });
+
+            const skybox = await renderer.loadPredefinedSkybox("ulukai_corona");
+            const skyboxProgram = renderer.createSkyboxProgram();
+
+            const panel = renderer.createQuad();
+            const panelModel = Transform.RotateTranslateScale(Quat(), Vec3(), Vec3(panelScale, panelScale, panelScale));
+
+            const grid = renderer.createGrid(10, 10, 1, 1);
+            const gridRotation = Transform.QuatFromAxisAngle(Vec3(1, 0, 0), Util.ToRadians(90))
+            const gridModel = Transform.RotateTranslateScale(gridRotation, Vec3(0, 0, -0.1), Vec3(panelScale / 10, panelScale / 10, panelScale / 10));
+
+            const axisThickness = 0.1;
+
+            const xAxisQuad = renderer.createQuad();
+            const xAxisQuadModel = Transform.RotateTranslateScale(Quat(), Vec3(0, 0, -0.075), Vec3(panelScale, axisThickness, 1));
+
+            const yAxisQuad = renderer.createQuad();
+            const yAxisQuadModel = Transform.RotateTranslateScale(Quat(), Vec3(0, 0, -0.05), Vec3(axisThickness, panelScale, 1));
+
+            const regressionLine = (pointControllerRef => {
+                const lineQuad = renderer.createQuad();
+                const lineQuadModel = Mat4();
+
+                let numPoints = 0;
+                let slope = 0, yIntercept = 0;
+
+                return Object.freeze({
+                    getModel: () => lineQuadModel,
+                    getSlope: () => slope,
+                    getYIntercept: () => yIntercept,
+                    draw: () => {
+                        if (numPoints > 1) {
+                            lineQuadModel.set(Transform.RotateTranslateScale(Transform.QuatFromAxisAngle(Vec3(0, 0, 1), Math.atan(slope)),
+                                                                             Vec3(0, yIntercept, 0.025),
+                                                                             Vec3(50 + yIntercept * yIntercept, 0.25, 1)));
+                            lineQuad.bind();
+                            lineQuad.draw();
+                        }
+                    },
+                    update: () => {
+                        const pointPositions = pointControllerRef.getPointPositions();
+                        numPoints = pointPositions.length;
+
+                        let x_mean = 0;
+                        let y_mean = 0;
+
+                        for (const v of pointPositions) {
+                            x_mean += v.getX();
+                            y_mean += v.getY();
+                        }
+                        x_mean /= numPoints;
+                        y_mean /= numPoints;
+
+                        let numerator = 0;
+                        let denominator = 0;
+                        for (const v of pointPositions) {
+                            numerator += (v.getX() - x_mean) * (v.getY() - y_mean);
+                            denominator += (v.getX() - x_mean) * (v.getX() - x_mean);
+                        }
+                        slope = numerator / denominator;
+                        yIntercept = y_mean - slope * x_mean;
+
+                        if (Number.isNaN(slope) || Number.isNaN(yIntercept)) {
+                            slope = yIntercept = 0;
+                        }
+                    }
+                });
+            })(pointController);
+
+            const emissiveColorProgram = renderer.createEmissiveColorProgram();
+
+            const ppStack = renderer.createPostProcessStack(renderer);
+
+            const UI = (updateInterval => {
+                const ms = document.querySelector("#MS");
+                const fps = document.querySelector("#FPS");
+                const cameraPos = document.querySelector("#CAMERA_POS");
+                const cameraDir = document.querySelector("#CAMERA_DIR");
+                const numPoints = document.querySelector("#NUM_POINTS");
+                const slope = document.querySelector("#SLOPE");
+                const yIntercept = document.querySelector("#Y-INTERCEPT");
+                const lastComputeTime = document.querySelector("#LAST_COMPUTE_TIME");
+                const loadingText = document.querySelector("#loading");
+                const helpBox = document.querySelector("#help");
+                let isHelpBoxShowing = true;
+
+                let lastTime = 0;
+                const shouldChange = () => {
+                    const now = window.performance.now();
+                    if (now - lastTime > updateInterval) {
+                        lastTime = now;
+                        return true;
+                    }
+                    return false;
+                };
+
+                return Object.freeze({
+                    update: params => {
+                        if (shouldChange()) {
+                            ms.innerHTML = `MS: ${params.ms.toFixed(0)}`;
+                            fps.innerHTML = `FPS: ${params.fps.toFixed(0)}`;
+                        }
+                        cameraPos.innerHTML = `POS: ${params.cameraPos.getX().toFixed(2)}, ${params.cameraPos.getY().toFixed(2)}, ${params.cameraPos.getZ().toFixed(2)}`;
+                        cameraDir.innerHTML = `DIR: ${params.cameraDir.getX().toFixed(2)}, ${params.cameraDir.getY().toFixed(2)}, ${params.cameraDir.getZ().toFixed(2)}`;
+                        numPoints.innerHTML = `NUM POINTS: ${params.numPoints}`;
+                        slope.innerHTML = `SLOPE: ${params.regressionLine.getSlope().toFixed(2)}`;
+                        yIntercept.innerHTML = `Y-INTERCEPT: ${params.regressionLine.getYIntercept().toFixed(2)}`;
+                    },
+                    updateHelpBox: e => {
+                        if (e.key === "h") {
+                            isHelpBoxShowing = !isHelpBoxShowing;
+                            if (isHelpBoxShowing) {
+                                helpBox.style.display = "block";
+                            } else {
+                                helpBox.style.display = "none";
+                            }
+                        }
+                    },
+                    closeHelpBox: () => {
+                        isHelpBoxShowing = false;
+                        helpBox.style.display = "none";
+                    },
+                    openHelpBox: () => {
+                        isHelpBoxShowing = true;
+                        helpBox.style.display = "block";
+                    },
+                    closeLoadingText: () => loadingText.style.display = "none"
+                });
+            })(1000);
+
+            window.addEventListener("wheel", camera.scrollCallback);
+            window.addEventListener("mousedown", camera.startOrbitingCallback);
+            window.addEventListener("mouseup", camera.stopOrbitingCallback);
+            window.addEventListener("mousemove", camera.orbitCallback);
+            window.addEventListener("mouseup", e => {
+                pointController.addPoint(e);
+                regressionLine.update();
+            });
+            window.addEventListener("keydown", e => {
+                pointController.removeLastPoint(e);
+                regressionLine.update();
+                UI.updateHelpBox(e);
+            });
+            window.addEventListener("resize", () => {
+                renderer.resize();
+                ppStack.resize();
+            });
+
+            UI.closeLoadingText();
+            UI.openHelpBox();
+
+            const render = () => {
+                
+                ppStack.firstPass();
+
+                const dt = renderer.computeDeltaTime();
+                camera.update(dt);
+
+                const projection = camera.getProjectionMatrix();
+                const view = camera.getViewMatrix();
+                const projectionView = projection.mul(view);
+
+                skyboxProgram.program().use();
+                skyboxProgram.setProjection(projection);
+                skyboxProgram.setView(view);
+                skybox.bind();
+                skyboxProgram.draw();
+
+                emissiveColorProgram.program().use();
+
+                emissiveColorProgram.setPVM(projectionView.mul(gridModel));
+                emissiveColorProgram.setColor(Vec4(1.0, 1.0, 1.0, 0.5));
+
+                grid.bind();
+                grid.drawLines();
+
+                emissiveColorProgram.setPVM(projectionView.mul(xAxisQuadModel));
+                emissiveColorProgram.setColor(Vec4(1.0, 1.0, 1.0, 1));
+
+                xAxisQuad.bind();
+                xAxisQuad.draw();
+
+                emissiveColorProgram.setPVM(projectionView.mul(yAxisQuadModel));
+                
+                yAxisQuad.bind();
+                yAxisQuad.draw();
+
+                emissiveColorProgram.setPVM(projectionView.mul(panelModel));
+                emissiveColorProgram.setColor(Vec4(0.25, 0.5, 1.0, 0.05));
+
+                panel.bind();
+                panel.draw();
+
+                emissiveColorProgram.setPVM(projectionView.mul(regressionLine.getModel()));
+                emissiveColorProgram.setColor(Vec4(0.25, 0.5, 1.0, 1.0));
+
+                regressionLine.draw();
+
+                pointController.program().use();
+                pointController.setProjectionViewMatrix(projectionView);
+                pointController.bindVAO();
+                pointController.draw();
+
+                ppStack.setGamma(2.2);
+                ppStack.setExposure(1.0);
+                ppStack.finalPass();
+
+                UI.update({
+                    ms: dt,
+                    fps: 1000.0 / dt,
+                    cameraPos: camera.getPosition(),
+                    cameraDir: camera.getDirection(),
+                    numPoints: pointController.getNumCurrentPoints(),
+                    regressionLine: regressionLine
+                });
+
+                requestAnimationFrame(render);
+            };
+            requestAnimationFrame(render);
+        }
+        catch(ex) {
+            const errorOutput = document.getElementById("error-output");
+            errorOutput.innerHTML = `<pre>${ex.toString()}</pre>`;
+            errorOutput.style.display = "block";
+        }
+    </script>
+</body>
+</html>
