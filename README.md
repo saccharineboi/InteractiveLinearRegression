@@ -9,7 +9,7 @@ This lab implements an interactive linear regression demo using webgl 2.0
 * Use scroll wheel to set the distance to the panel
 * Use Ctrl-Z to remove points
 
-## Demo
+# Demo
 [Link](https://saccharineboi.com/html/linear_regression.html)
 
 # Preview
